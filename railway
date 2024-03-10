@@ -1,0 +1,235 @@
+#define BLYNK_TEMPLATE_ID "TMPL364IliXkr"
+#define BLYNK_TEMPLATE_NAME "track"
+#define BLYNK_AUTH_TOKEN "xUBiAyERim2WD73izBPo52Q6Py0R55Rt"
+#define BLYNK_PRINT Serial
+
+#include<BlynkSimpleEsp8266.h>
+#include<ESP8266WiFi.h>
+
+char auth[] = BLYNK_AUTH_TOKEN;
+BlynkTimer timer;
+WiFiClient client;
+
+const char* ssid  = "Kk";
+const char* password  = "0123456789";
+
+#include <Servo.h>
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+LiquidCrystal_I2C lcd(0x27, 16, 2); // set the LCD address to 0x3F for a 16 chars and 2 line display
+
+int tap_servo_pin = D6;
+const int IR_sensor1 = D4; // IR sensor 1 connected to digital pin D4
+const int IR_sensor2 = D5; // IR sensor 2 connected to digital pin D5
+
+Servo tap_servo;
+
+int val1;
+int val2;
+int i;
+int j;
+int a = 0;
+int b = 1;
+int pos;
+int automode = 0;
+String stat1 = "Open";
+String stat2 = "Close";
+
+
+BLYNK_CONNECTED()
+{
+  // Change Web Link Button message to "Congratulations!"
+  Blynk.setProperty(V3, "offImageUrl", "https://static-image.nyc3.cdn.digitaloceanspaces.com/general/fte/congratulations.png");
+  Blynk.setProperty(V3, "onImageUrl",  "https://static-image.nyc3.cdn.digitaloceanspaces.com/general/fte/congratulations_pressed.png");
+  Blynk.setProperty(V3, "url", "https://docs.blynk.io/en/getting-started/what-do-i-need-to-blynk/how-quickstart-device-was-made");
+  //  Blynk.syncVirtual(V0);
+  //  Blynk.syncVirtual(V1);
+  //  Blynk.syncVirtual(V2);
+}
+
+void setup() {
+  pinMode(IR_sensor1, INPUT); // Set IR sensor 1 pin as input
+  pinMode(IR_sensor2, INPUT); // Set IR sensor 2 pin as input
+  pinMode(D3, OUTPUT);
+  tap_servo.attach(tap_servo_pin);
+  Serial.begin(9600); // Start serial communication
+
+  lcd.init();
+  lcd.backlight(); // Make sure backlight is on
+  lcd.clear();
+
+  lcd.setCursor(4, 0);
+  lcd.print("Welcome");
+
+  delay(2000);
+  lcd.clear();
+  lcd.setCursor(1, 1);
+  lcd.print("Initializing...");
+  delay(2000);
+  lcd.clear();
+
+  tap_servo.write(180);
+
+  Blynk.begin(auth, ssid, password);
+  WiFi.mode(WIFI_STA);
+  Serial.print("connected to ssid");
+  Serial.println(ssid);
+
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+
+    Blynk.virtualWrite(V0, HIGH);
+    Blynk.virtualWrite(V4, LOW);
+    Blynk.virtualWrite(V1, stat2);
+
+    //    lcd.setCursor(3, 0);
+    //    lcd.print("Connecting");
+    //    lcd.setCursor(3, 1);
+    //    lcd.print("to WiFi.....");
+    //    delay(1000);
+    //    lcd.clear();
+  }
+}
+
+void loop() {
+
+  Blynk.run();
+
+  if (automode) {
+
+    Serial.println("Auto-mode");
+
+    sense();
+
+    entering();
+
+    leaving();
+  }
+
+}
+
+void sense() {
+  val1 = digitalRead(IR_sensor1);
+  val2 = digitalRead(IR_sensor2);
+}
+
+
+void buzz() {
+  for (i = 0; i <= 5; i++)
+  {
+    digitalWrite(D3, HIGH); //buzzer pins positive to pin-D3 & gnd to gnd
+    delay(1000);
+    digitalWrite(D3, LOW);
+    delay(1000);
+  }
+
+}
+
+void entering() {
+  if (val1 == 0 && a == 0)
+  { lcd.clear();
+    lcd.setCursor(3, 0);
+    lcd.print("Train is");
+    lcd.setCursor(3, 1);
+    lcd.print("Entering");
+    buzz();
+    for (pos = 180; pos >= 0; pos -= 1) {  // goes from 0 degrees to 180 degrees
+      tap_servo.write(pos);  // tell servo to go to position in variable 'pos'
+      delay(15);           // waits 15ms for the servo to reach the position
+    }
+    lcd.clear();
+    lcd.setCursor(3, 0);
+    lcd.print("Walkpath");
+    lcd.setCursor(3, 1);
+    lcd.print("detached");
+    Blynk.virtualWrite(V0, LOW);
+    Blynk.virtualWrite(V4, HIGH);
+    Blynk.virtualWrite(V1, stat1);
+    a = 1;
+    b = 0;
+  }
+}
+
+void leaving() {
+  if (val2 == 0 && b == 0)
+  { lcd.clear();
+    lcd.setCursor(3, 0);
+    lcd.print("Train is");
+    lcd.setCursor(3, 1);
+    lcd.print("Leaving");
+    buzz();
+    for (pos = 0; pos <= 180; pos += 1) {  // goes from 0 degrees to 180 degrees
+      tap_servo.write(pos);  // tell servo to go to position in variable 'pos'
+      delay(15);           // waits 15ms for the servo to reach the position
+    }
+    lcd.clear();
+    lcd.setCursor(3, 0);
+    lcd.print("Walkpath");
+    lcd.setCursor(3, 1);
+    lcd.print("attached");
+    Blynk.virtualWrite(V0, HIGH);
+    Blynk.virtualWrite(V4, LOW);
+    Blynk.virtualWrite(V1, stat2);
+    b = 1;
+    a = 0;
+  }
+}
+
+BLYNK_WRITE(V3) {
+  automode = param.asInt();
+}
+
+BLYNK_WRITE(V2) {
+  Serial.println("Blynk-Servo");
+  if (!automode) {
+    Serial.println("Manual");
+    if (a == 0) {
+      lcd.clear();
+      lcd.setCursor(3, 0);
+      lcd.print("Train is");
+      lcd.setCursor(3, 1);
+      lcd.print("Entering");
+      buzz();
+      for (pos = 180; pos >= 0; pos -= 1) {  // goes from 0 degrees to 180 degrees
+        tap_servo.write(pos);  // tell servo to go to position in variable 'pos'
+        delay(15);           // waits 15ms for the servo to reach the position
+      }
+      lcd.clear();
+      lcd.setCursor(3, 0);
+      lcd.print("Walkpath");
+      lcd.setCursor(3, 1);
+      lcd.print("detached");
+      Blynk.virtualWrite(V0, LOW);
+      Blynk.virtualWrite(V4, HIGH);
+      Blynk.virtualWrite(V1, stat1);
+      a = 1;
+      b = 0;
+    }
+    else if (b == 0) {
+      Serial.println("leaving");
+      lcd.clear();
+      lcd.setCursor(3, 0);
+      lcd.print("Train is");
+      lcd.setCursor(3, 1);
+      lcd.print("Leaving");
+      buzz();
+      for (pos = 0; pos <= 180; pos += 1) {  // goes from 0 degrees to 180 degrees
+        tap_servo.write(pos);  // tell servo to go to position in variable 'pos'
+        delay(15);           // waits 15ms for the servo to reach the position
+      }
+      lcd.clear();
+      lcd.setCursor(3, 0);
+      lcd.print("Walkpath");
+      lcd.setCursor(3, 1);
+      lcd.print("attached");
+      Blynk.virtualWrite(V0, HIGH);
+      Blynk.virtualWrite(V4, LOW);
+      Blynk.virtualWrite(V1, stat2);
+      b = 1;
+      a = 0;
+    }
+  }
+}
+
